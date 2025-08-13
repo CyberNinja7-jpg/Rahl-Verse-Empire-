@@ -21,9 +21,15 @@ const app = express();
 app.use(express.json());
 app.use(express.static("public"));
 
-// === Ensure auth/rahl directory exists ===
+// === Force auth/rahl folder to exist ===
 const authFolder = path.join(__dirname, "auth", "rahl");
-if (!fs.existsSync(authFolder)) {
+if (fs.existsSync(authFolder)) {
+    if (!fs.lstatSync(authFolder).isDirectory()) {
+        fs.unlinkSync(authFolder); // delete the file if it exists
+        fs.mkdirSync(authFolder, { recursive: true });
+        console.log(`📂 Recreated auth folder at ${authFolder}`);
+    }
+} else {
     fs.mkdirSync(authFolder, { recursive: true });
     console.log(`📁 Created auth folder at ${authFolder}`);
 }
@@ -42,37 +48,30 @@ async function startSock() {
         printQRInTerminal: false
     });
 
-    // Save credentials whenever updated
     sock.ev.on("creds.update", saveCreds);
 
-    // Handle connection status
     sock.ev.on("connection.update", async (update) => {
         const { connection, qr } = update;
 
         if (connection === "open") {
             console.log("✅ WhatsApp Connected");
-
-            // Send welcome message to owner
             if (process.env.OWNER_NUMBER) {
                 const ownerJid = `${process.env.OWNER_NUMBER}@s.whatsapp.net`;
                 await sock.sendMessage(ownerJid, { 
                     text: `✅ ${process.env.BOT_NAME || "Rahl Quantum"} is now online! 🚀`
                 });
             }
-        } 
-        else if (connection === "close") {
+        } else if (connection === "close") {
             console.log("❌ Disconnected, reconnecting...");
             setTimeout(startSock, 5000);
         }
 
-        // QR code handling
         if (qr) {
             console.log("📲 QR Code generated");
         }
     });
 }
 
-// Start bot
 startSock();
 
 // === API endpoint for QR code ===
