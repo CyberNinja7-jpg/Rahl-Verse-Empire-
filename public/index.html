@@ -28,7 +28,7 @@
   <!-- Landing Menu -->
   <div id="menu" class="container">
     <button class="qr-btn" onclick="showQR()">Use QR Code</button>
-    <button class="pair-btn" onclick="showPair()">Use Pairing Code</button>
+    <button class="pair-btn" onclick="showPair()">Use Session Code</button>
   </div>
 
   <!-- QR Mode -->
@@ -39,13 +39,14 @@
     <br><button onclick="goBack()">⬅ Back</button>
   </div>
 
-  <!-- Pair Mode -->
+  <!-- Session Code Mode -->
   <div id="pairPanel" class="container" style="display:none;">
-    <input type="text" id="number" placeholder="Enter phone number e.g. 2547XXXXXXX">
-    <button onclick="getCode()">Get Code</button>
+    <button onclick="getCode()">Generate Session Code</button>
     <div id="loader"></div>
     <div id="status"></div>
-    <div id="code"></div>
+    <input type="text" id="code" readonly placeholder="Session code will appear here">
+    <br>
+    <button id="copyBtn">Copy Code</button>
     <br><button onclick="goBack()">⬅ Back</button>
   </div>
 
@@ -55,71 +56,81 @@
       document.getElementById("qrPanel").style.display = "block";
       generateQR();
     }
+
     function showPair() {
       document.getElementById("menu").style.display = "none";
       document.getElementById("pairPanel").style.display = "block";
     }
+
     function goBack() {
       document.getElementById("menu").style.display = "block";
       document.getElementById("qrPanel").style.display = "none";
       document.getElementById("pairPanel").style.display = "none";
+      document.getElementById("status").textContent = "";
+      document.getElementById("code").value = "";
+      document.getElementById("loader").style.display = "none";
     }
 
     async function generateQR() {
-      document.getElementById("qrLoader").style.display = "block";
-      document.getElementById("qrImage").style.display = "none";
+      const qrLoader = document.getElementById("qrLoader");
+      const qrImage = document.getElementById("qrImage");
+      qrLoader.style.display = "block";
+      qrImage.style.display = "none";
+
       try {
         const res = await fetch("/qr");
         const data = await res.json();
-        document.getElementById("qrLoader").style.display = "none";
-        if (data.ok) {
-          document.getElementById("qrImage").src = data.qr;
-          document.getElementById("qrImage").style.display = "block";
+        qrLoader.style.display = "none";
+        if(data.ok){
+          qrImage.src = data.qr;
+          qrImage.style.display = "block";
         } else {
           alert("Error generating QR: " + data.error);
         }
       } catch {
+        qrLoader.style.display = "none";
         alert("Failed to fetch QR code");
       }
     }
 
     async function getCode() {
-      const number = document.getElementById("number").value.trim();
-      const codeDiv = document.getElementById("code");
       const loader = document.getElementById("loader");
       const status = document.getElementById("status");
+      const codeInput = document.getElementById("code");
 
-      codeDiv.textContent = "";
-      status.textContent = "";
       loader.style.display = "block";
       status.textContent = "🔍 Rahl is scanning...";
       status.style.color = "#555";
+      codeInput.value = "";
 
       try {
-        const res = await fetch("/pair", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ number })
-        });
+        const res = await fetch("/session");
         const data = await res.json();
-
         loader.style.display = "none";
 
-        if (data.ok) {
-          codeDiv.textContent = `✅ Pairing Code: ${data.code}`;
-          status.textContent = "✔️ Code generated successfully!";
+        if(data.ok){
+          codeInput.value = data.code;
+          status.textContent = "✔️ Session code generated!";
           status.style.color = "green";
         } else {
-          codeDiv.textContent = "";
-          status.textContent = `❌ Error: ${data.error}`;
+          status.textContent = "❌ Failed to generate session code";
           status.style.color = "red";
         }
-      } catch (err) {
+      } catch {
         loader.style.display = "none";
-        status.textContent = "❌ Failed to get code";
+        status.textContent = "❌ Failed to generate session code";
         status.style.color = "red";
       }
     }
+
+    // Copy session code
+    document.getElementById("copyBtn").addEventListener("click", () => {
+      const input = document.getElementById("code");
+      input.select();
+      input.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(input.value);
+      alert("Session code copied!");
+    });
   </script>
 </body>
 </html>
