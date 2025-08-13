@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: rahl-quantum
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OWNER_NUMBER
+        value: "2547XXXXXXX" # change to your WhatsApp number
