@@ -1,9 +1,12 @@
 import express from "express";
-import makeWASocket, { 
-    useMultiFileAuthState, 
+import baileysPkg from "@whiskeysockets/baileys";
+const {
+    default: makeWASocket,
+    useMultiFileAuthState,
     fetchLatestBaileysVersion,
     makeInMemoryStore
-} from "@whiskeysockets/baileys";
+} = baileysPkg;
+
 import pino from "pino";
 import qrcode from "qrcode";
 import path from "path";
