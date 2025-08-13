@@ -1,17 +1,16 @@
 import express from "express";
 import fs from "fs";
 import pkg from "@whiskeysockets/baileys";
-const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, generatePairingCode } = pkg;
+const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } = pkg;
 import pino from "pino";
 import qrcode from "qrcode";
 import path from "path";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
+import crypto from "crypto";
 
-// Load .env
 dotenv.config();
 
-// Fix __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -19,22 +18,20 @@ const app = express();
 app.use(express.json());
 app.use(express.static("public"));
 
-// === Ensure auth/rahl directory exists ===
+// Ensure auth folder exists
 const authFolder = path.join(__dirname, "auth", "rahl");
 if (fs.existsSync(authFolder)) {
     if (!fs.lstatSync(authFolder).isDirectory()) {
-        fs.unlinkSync(authFolder); 
+        fs.unlinkSync(authFolder);
         fs.mkdirSync(authFolder, { recursive: true });
-        console.log(`📂 Recreated auth folder at ${authFolder}`);
     }
 } else {
     fs.mkdirSync(authFolder, { recursive: true });
-    console.log(`📁 Created auth folder at ${authFolder}`);
 }
 
 let sock;
 
-// === Start WhatsApp connection ===
+// Start WhatsApp connection
 async function startSock() {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version } = await fetchLatestBaileysVersion();
@@ -53,28 +50,26 @@ async function startSock() {
 
         if (connection === "open") {
             console.log("✅ WhatsApp Connected");
+
             if (process.env.OWNER_NUMBER) {
                 const ownerJid = `${process.env.OWNER_NUMBER}@s.whatsapp.net`;
                 await sock.sendMessage(ownerJid, { 
-                    text: `✅ ${process.env.BOT_NAME || "Rahl Quantum"} is online!`
+                    text: `✅ ${process.env.BOT_NAME || "Rahl Quantum"} is online!` 
                 });
             }
-        } 
-        else if (connection === "close") {
+        } else if (connection === "close") {
             console.log("❌ Disconnected, reconnecting...");
             setTimeout(startSock, 5000);
         }
 
-        if (qr) {
-            console.log("📲 QR Code generated");
-        }
+        if (qr) console.log("📲 QR Code generated");
     });
 }
 
 // Start bot
 startSock();
 
-// === QR endpoint ===
+// === QR Endpoint ===
 app.get("/qr", async (req, res) => {
     if (!sock) return res.json({ ok: false, error: "Socket not ready" });
 
@@ -90,21 +85,25 @@ app.get("/qr", async (req, res) => {
     });
 });
 
-// === Pairing code endpoint ===
-app.get("/pair", async (req, res) => {
+// === Custom Session Code Endpoint ===
+app.get("/session", async (req, res) => {
     try {
-        if (!process.env.OWNER_NUMBER) return res.json({ ok: false, error: "OWNER_NUMBER not set" });
+        if (!sock) return res.json({ ok: false, error: "Socket not ready" });
 
-        // Generate 8-digit pairing code (multi-device)
-        const { code } = await generatePairingCode(sock, process.env.OWNER_NUMBER);
-        
-        // Send the code to owner via WhatsApp
-        const ownerJid = `${process.env.OWNER_NUMBER}@s.whatsapp.net`;
-        await sock.sendMessage(ownerJid, { text: `📲 Your 8-digit pairing code: ${code}` });
+        // Generate a random session code
+        const sessionCode = crypto.randomBytes(4).toString("hex"); // 8-char hex
+
+        // Save code locally (optional, for verification)
+        fs.writeFileSync(path.join(authFolder, "session_code.txt"), sessionCode);
+
+        // Send the code to your WhatsApp DM
+        if (process.env.OWNER_NUMBER) {
+            const ownerJid = `${process.env.OWNER_NUMBER}@s.whatsapp.net`;
+            await sock.sendMessage(ownerJid, { text: `📡 Your Rahl session code: ${sessionCode}` });
+        }
 
         // Return code to frontend
-        res.json({ ok: true, code });
-
+        res.json({ ok: true, code: sessionCode });
     } catch (err) {
         res.json({ ok: false, error: err.message });
     }
