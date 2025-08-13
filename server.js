@@ -1,7 +1,7 @@
 import express from "express";
 import fs from "fs";
 import pkg from "@whiskeysockets/baileys";
-const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } = pkg;
+const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, generatePairingCode } = pkg;
 import pino from "pino";
 import qrcode from "qrcode";
 import path from "path";
@@ -23,7 +23,7 @@ app.use(express.static("public"));
 const authFolder = path.join(__dirname, "auth", "rahl");
 if (fs.existsSync(authFolder)) {
     if (!fs.lstatSync(authFolder).isDirectory()) {
-        fs.unlinkSync(authFolder); // delete file if it exists
+        fs.unlinkSync(authFolder); 
         fs.mkdirSync(authFolder, { recursive: true });
         console.log(`📂 Recreated auth folder at ${authFolder}`);
     }
@@ -46,21 +46,17 @@ async function startSock() {
         printQRInTerminal: false
     });
 
-    // Save credentials whenever updated
     sock.ev.on("creds.update", saveCreds);
 
-    // Handle connection status
     sock.ev.on("connection.update", async (update) => {
         const { connection, qr } = update;
 
         if (connection === "open") {
             console.log("✅ WhatsApp Connected");
-
-            // Send welcome message to owner
             if (process.env.OWNER_NUMBER) {
                 const ownerJid = `${process.env.OWNER_NUMBER}@s.whatsapp.net`;
                 await sock.sendMessage(ownerJid, { 
-                    text: `✅ ${process.env.BOT_NAME || "Rahl Quantum"} is now online! 🚀`
+                    text: `✅ ${process.env.BOT_NAME || "Rahl Quantum"} is online!`
                 });
             }
         } 
@@ -69,7 +65,6 @@ async function startSock() {
             setTimeout(startSock, 5000);
         }
 
-        // QR code handling
         if (qr) {
             console.log("📲 QR Code generated");
         }
@@ -79,7 +74,7 @@ async function startSock() {
 // Start bot
 startSock();
 
-// === API endpoint for QR code ===
+// === QR endpoint ===
 app.get("/qr", async (req, res) => {
     if (!sock) return res.json({ ok: false, error: "Socket not ready" });
 
@@ -95,14 +90,21 @@ app.get("/qr", async (req, res) => {
     });
 });
 
-// === API endpoint for pairing code ===
+// === Pairing code endpoint ===
 app.get("/pair", async (req, res) => {
     try {
-        if (!process.env.OWNER_NUMBER) {
-            return res.json({ ok: false, error: "OWNER_NUMBER not set in .env" });
-        }
-        const code = await sock.requestPairingCode(process.env.OWNER_NUMBER);
+        if (!process.env.OWNER_NUMBER) return res.json({ ok: false, error: "OWNER_NUMBER not set" });
+
+        // Generate 8-digit pairing code (multi-device)
+        const { code } = await generatePairingCode(sock, process.env.OWNER_NUMBER);
+        
+        // Send the code to owner via WhatsApp
+        const ownerJid = `${process.env.OWNER_NUMBER}@s.whatsapp.net`;
+        await sock.sendMessage(ownerJid, { text: `📲 Your 8-digit pairing code: ${code}` });
+
+        // Return code to frontend
         res.json({ ok: true, code });
+
     } catch (err) {
         res.json({ ok: false, error: err.message });
     }
