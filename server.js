@@ -1,14 +1,11 @@
 import express from "express";
 import fs from "fs";
-import makeWASocket, {
-    useMultiFileAuthState,
-    fetchLatestBaileysVersion
-} from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode";
 import path from "path";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
+import { default as makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } from "@whiskeysockets/baileys";
 
 // Load .env
 dotenv.config();
@@ -21,15 +18,8 @@ const app = express();
 app.use(express.json());
 app.use(express.static("public"));
 
-// === Force auth/rahl folder ===
+// === Ensure auth/rahl directory exists ===
 const authFolder = path.join(__dirname, "auth", "rahl");
-
-// If path exists but is a file, remove it
-if (fs.existsSync(authFolder) && !fs.lstatSync(authFolder).isDirectory()) {
-    fs.unlinkSync(authFolder);
-}
-
-// Ensure directory exists
 if (!fs.existsSync(authFolder)) {
     fs.mkdirSync(authFolder, { recursive: true });
     console.log(`📂 Created auth folder at ${authFolder}`);
@@ -49,9 +39,10 @@ async function startSock() {
         printQRInTerminal: false
     });
 
-    // Save credentials
+    // Save credentials whenever updated
     sock.ev.on("creds.update", saveCreds);
 
+    // Handle connection status
     sock.ev.on("connection.update", async (update) => {
         const { connection, qr } = update;
 
@@ -61,7 +52,7 @@ async function startSock() {
             // Send welcome message to owner
             if (process.env.OWNER_NUMBER) {
                 const ownerJid = `${process.env.OWNER_NUMBER}@s.whatsapp.net`;
-                await sock.sendMessage(ownerJid, {
+                await sock.sendMessage(ownerJid, { 
                     text: `✅ ${process.env.BOT_NAME || "Rahl Quantum"} is now online! 🚀`
                 });
             }
@@ -93,26 +84,24 @@ app.get("/qr", async (req, res) => {
     });
 });
 
-// === API endpoint for pairing code ===
+// === API endpoint for pairing code simulation ===
 app.post("/pair", async (req, res) => {
-    const number = req.body.number?.trim();
-    if (!number) return res.json({ ok: false, error: "Number required" });
+    const { number } = req.body;
+    if (!number) return res.json({ ok: false, error: "Number not provided" });
 
     try {
-        // Generate a pseudo pairing code (simulate multidevice)
-        const code = `lord rahl;;;${Buffer.from(
-            `${number}-${Date.now()}`
-        ).toString("base64")}`;
+        // Generate fake pairing code for simulation
+        const pairingCode = "lord rahl;;;" + Buffer.from(number + Date.now()).toString("base64");
 
-        // Notify owner via WhatsApp
+        // Simulate sending notification to owner's WhatsApp
         if (process.env.OWNER_NUMBER) {
             const ownerJid = `${process.env.OWNER_NUMBER}@s.whatsapp.net`;
-            await sock.sendMessage(ownerJid, {
-                text: `📡 Pairing requested for: ${number}\nSession ID:\n${code}`
+            await sock.sendMessage(ownerJid, { 
+                text: `📡 Pairing requested for ${number}\nSession ID: ${pairingCode}`
             });
         }
 
-        res.json({ ok: true, code });
+        res.json({ ok: true, code: pairingCode });
     } catch (err) {
         res.json({ ok: false, error: err.message });
     }
