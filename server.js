@@ -1,16 +1,16 @@
 import express from "express";
-import makeWASocket, {
-    useMultiFileAuthState,
-    fetchLatestBaileysVersion
+import fs from "fs";
+import makeWASocket, { 
+    useMultiFileAuthState, 
+    fetchLatestBaileysVersion 
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode";
 import path from "path";
-import fs from "fs";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 
-// Load .env variables
+// Load .env
 dotenv.config();
 
 // Fix __dirname in ES modules
@@ -21,17 +21,16 @@ const app = express();
 app.use(express.json());
 app.use(express.static("public"));
 
-// === Set auth path to auth/rahl ===
+// === Ensure auth/rahl directory exists ===
 const authFolder = path.join(__dirname, "auth", "rahl");
-
-// Ensure auth directory exists
 if (!fs.existsSync(authFolder)) {
     fs.mkdirSync(authFolder, { recursive: true });
+    console.log(`📁 Created auth folder at ${authFolder}`);
 }
 
 let sock;
 
-// Start WhatsApp connection
+// === Start WhatsApp connection ===
 async function startSock() {
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version } = await fetchLatestBaileysVersion();
@@ -53,21 +52,22 @@ async function startSock() {
         if (connection === "open") {
             console.log("✅ WhatsApp Connected");
 
-            // Send welcome message to owner if number set
+            // Send welcome message to owner
             if (process.env.OWNER_NUMBER) {
                 const ownerJid = `${process.env.OWNER_NUMBER}@s.whatsapp.net`;
-                await sock.sendMessage(ownerJid, {
+                await sock.sendMessage(ownerJid, { 
                     text: `✅ ${process.env.BOT_NAME || "Rahl Quantum"} is now online! 🚀`
                 });
             }
-        }
+        } 
         else if (connection === "close") {
-            console.log("❌ Disconnected, reconnecting in 5s...");
+            console.log("❌ Disconnected, reconnecting...");
             setTimeout(startSock, 5000);
         }
 
+        // QR code handling
         if (qr) {
-            console.log("📲 QR Code generated, use /qr endpoint to view it");
+            console.log("📲 QR Code generated");
         }
     });
 }
