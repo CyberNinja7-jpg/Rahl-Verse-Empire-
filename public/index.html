@@ -17,7 +17,6 @@
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     #status { margin-top: 15px; font-size: 18px; color: #555; }
     #code { font-size: 24px; color: green; margin-top: 20px; }
-    .error { color: red; }
     input { padding: 10px; font-size: 16px; width: 250px; border: 2px solid #25d366; border-radius: 5px; margin: 5px; }
     img.qr { margin-top: 20px; width: 250px; border: 5px solid #25d366; border-radius: 10px; }
   </style>
@@ -28,25 +27,26 @@
   <!-- Landing Menu -->
   <div id="menu" class="container">
     <button class="qr-btn" onclick="showQR()">Use QR Code</button>
-    <button class="pair-btn" onclick="showPair()">Use Session Code</button>
+    <button class="pair-btn" onclick="showPair()">Use Pairing Code</button>
   </div>
 
   <!-- QR Mode -->
   <div id="qrPanel" class="container" style="display:none;">
     <h2>Scan This QR in WhatsApp</h2>
-    <div id="qrLoader" style="display:none;">⌛ Generating QR...</div>
+    <div id="qrLoader">⌛ Generating QR...</div>
     <img id="qrImage" class="qr" style="display:none;" />
     <br><button onclick="goBack()">⬅ Back</button>
   </div>
 
-  <!-- Session Code Mode -->
+  <!-- Pair Mode -->
   <div id="pairPanel" class="container" style="display:none;">
-    <button onclick="getCode()">Generate Session Code</button>
+    <input type="text" id="number" placeholder="Enter phone number e.g. 2547XXXXXXX">
+    <button onclick="getCode()">Get Code</button>
     <div id="loader"></div>
     <div id="status"></div>
-    <input type="text" id="code" readonly placeholder="Session code will appear here">
-    <br>
-    <button id="copyBtn">Copy Code</button>
+    <input type="text" id="pairCode" placeholder="Enter pairing code">
+    <button onclick="verifyCode()">Verify Code</button>
+    <div id="sessionId"></div>
     <br><button onclick="goBack()">⬅ Back</button>
   </div>
 
@@ -56,81 +56,89 @@
       document.getElementById("qrPanel").style.display = "block";
       generateQR();
     }
-
     function showPair() {
       document.getElementById("menu").style.display = "none";
       document.getElementById("pairPanel").style.display = "block";
     }
-
     function goBack() {
       document.getElementById("menu").style.display = "block";
       document.getElementById("qrPanel").style.display = "none";
       document.getElementById("pairPanel").style.display = "none";
-      document.getElementById("status").textContent = "";
-      document.getElementById("code").value = "";
-      document.getElementById("loader").style.display = "none";
     }
 
     async function generateQR() {
-      const qrLoader = document.getElementById("qrLoader");
-      const qrImage = document.getElementById("qrImage");
-      qrLoader.style.display = "block";
-      qrImage.style.display = "none";
-
+      document.getElementById("qrLoader").style.display = "block";
+      document.getElementById("qrImage").style.display = "none";
       try {
         const res = await fetch("/qr");
         const data = await res.json();
-        qrLoader.style.display = "none";
-        if(data.ok){
-          qrImage.src = data.qr;
-          qrImage.style.display = "block";
+        document.getElementById("qrLoader").style.display = "none";
+        if (data.ok) {
+          document.getElementById("qrImage").src = data.qr;
+          document.getElementById("qrImage").style.display = "block";
         } else {
           alert("Error generating QR: " + data.error);
         }
       } catch {
-        qrLoader.style.display = "none";
         alert("Failed to fetch QR code");
       }
     }
 
     async function getCode() {
+      const number = document.getElementById("number").value.trim();
       const loader = document.getElementById("loader");
       const status = document.getElementById("status");
-      const codeInput = document.getElementById("code");
+
+      if (!number) return alert("Please enter your phone number");
 
       loader.style.display = "block";
-      status.textContent = "🔍 Rahl is scanning...";
+      status.textContent = "🔍 Sending code to your WhatsApp...";
       status.style.color = "#555";
-      codeInput.value = "";
 
       try {
-        const res = await fetch("/session");
+        const res = await fetch("/pair", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ number })
+        });
         const data = await res.json();
+
         loader.style.display = "none";
 
-        if(data.ok){
-          codeInput.value = data.code;
-          status.textContent = "✔️ Session code generated!";
+        if (data.ok) {
+          status.textContent = "✔️ Code sent to your WhatsApp!";
           status.style.color = "green";
         } else {
-          status.textContent = "❌ Failed to generate session code";
+          status.textContent = "❌ " + data.error;
           status.style.color = "red";
         }
       } catch {
-        loader.style.display = "none";
-        status.textContent = "❌ Failed to generate session code";
+        status.textContent = "❌ Failed to connect to server";
         status.style.color = "red";
       }
     }
 
-    // Copy session code
-    document.getElementById("copyBtn").addEventListener("click", () => {
-      const input = document.getElementById("code");
-      input.select();
-      input.setSelectionRange(0, 99999);
-      navigator.clipboard.writeText(input.value);
-      alert("Session code copied!");
-    });
+    async function verifyCode() {
+      const code = document.getElementById("pairCode").value.trim();
+      if (!code) return alert("Please enter your pairing code");
+
+      try {
+        const res = await fetch("/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code })
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          document.getElementById("sessionId").textContent = `✅ Session ID: ${data.sessionId}`;
+        } else {
+          alert("Error: " + data.error);
+        }
+      } catch {
+        alert("Failed to verify code");
+      }
+    }
   </script>
 </body>
 </html>
